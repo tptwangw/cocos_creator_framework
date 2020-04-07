@@ -1,13 +1,13 @@
-import { resLoader } from "./ResLoader";
+import {resLoader} from "./ResLoader";
 
 /**
  * Prefab的实例对象管理，目标为减少instantiate的次数，复用Node
- * 
+ *
  * 2020-1-19 by 宝爷
  */
 
 export type NodePoolCallback = (error: Error, nodePool: NodePool) => void;
- 
+
 export class NodePool {
     private _isReady: boolean = false;
     private _createCount: number = 0;
@@ -16,19 +16,21 @@ export class NodePool {
     private _res: cc.Prefab = null;
     private _nodes: Array<cc.Node> = new Array<cc.Node>();
 
-    public isReady() { return this._isReady; }
+    public isReady() {
+        return this._isReady;
+    }
 
     /**
      * 初始化NodePool，可以传入使用resloader加载的prefab，或者传入url异步加载
      * 如果使用url来初始化，需要检查isReady，否则获取node会返回null
-     * @param prefab 
+     * @param prefab
      * @param url
      */
     public init(prefab: cc.Prefab)
     public init(url: string, finishCallback: NodePoolCallback)
     public init() {
         let urlOrPrefab = arguments[0];
-        var finishCallback = null;
+        let finishCallback = null;
         if (arguments.length == 2 && typeof arguments[1] == "function") {
             finishCallback = arguments[1];
         }

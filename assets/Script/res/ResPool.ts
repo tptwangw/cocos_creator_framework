@@ -1,5 +1,4 @@
-import ResLoader, { resLoader, CompletedCallback, ProcessCallback, LoadResArgs } from "./ResLoader";
-import { NodePool } from "./NodePool";
+import ResLoader, {CompletedCallback, LoadResArgs, ProcessCallback, resLoader} from "./ResLoader";
 
 /**
  * ResPool，可提高资源缓存的效率，

@@ -1,5 +1,6 @@
-import { UIView, UIShowTypes } from "./UIView";
+import { UIView } from "./UIView";
 import { resLoader, ProcessCallback } from "../res/ResLoader";
+import FullScreenFit from "./FullScreenFit";
 
 /**
  * UIManager界面管理类
@@ -25,10 +26,24 @@ export interface UIInfo {
     resCache?: string[];
 }
 
+/** 界面展示类型 */
+export enum UIShowTypes {
+    UIFullScreen,       // 全屏显示，全屏界面使用该选项可获得更高性能
+    UIAddition,         // 叠加显示，性能较差
+    UISingle,           // 单界面显示，只显示当前界面和背景界面，性能较好
+}
+
 /** UI配置结构体 */
 export interface UIConf {
     prefab: string;
+    /** 界面显示类型 */
+    showType: UIShowTypes;
+    /** 屏蔽触摸 */
     preventTouch?: boolean;
+    /** 快速关闭 */
+    quickClose?: boolean;
+    /** 缓存选项 */
+    cache?: boolean;
 }
 
 export class UIManager {
@@ -83,7 +98,7 @@ export class UIManager {
      * @param zOrder 屏蔽层的层级
      */
     private preventTouch(zOrder: number) {
-        let node = new cc.Node()
+        let node = new cc.Node();
         node.name = 'preventTouch';
         node.setContentSize(cc.winSize);
         node.on(cc.Node.EventType.TOUCH_START, function (event: cc.Event.EventCustom) {
@@ -134,28 +149,6 @@ export class UIManager {
 
     /** 根据界面显示类型刷新显示 */
     private updateUI() {
-        let hideIndex: number = 0;
-        let showIndex: number = this.UIStack.length - 1;
-        for (; showIndex >= 0; --showIndex) {
-            let mode = this.UIStack[showIndex].uiView.showType;
-            // 无论何种模式，最顶部的UI都是应该显示的
-            this.UIStack[showIndex].uiView.node.active = true;
-            if (UIShowTypes.UIFullScreen == mode) {
-                break;
-            } else if (UIShowTypes.UISingle == mode) {
-                for (let i = 0; i < this.BackGroundUI; ++i) {
-                    if (this.UIStack[i]) {
-                        this.UIStack[i].uiView.node.active = true;
-                    }
-                }
-                hideIndex = this.BackGroundUI;
-                break;
-            }
-        }
-        // 隐藏不应该显示的部分UI
-        for (let hide: number = hideIndex; hide < showIndex; ++hide) {
-            this.UIStack[hide].uiView.node.active = false;
-        }
     }
 
     /**
@@ -229,26 +222,34 @@ export class UIManager {
         // 激活界面
         uiInfo.uiView = uiView;
         uiView.node.active = true;
-        uiView.node.zIndex = uiInfo.zOrder || this.UIStack.length
+        uiView.node.zIndex = uiInfo.zOrder || this.UIStack.length;
 
         // 快速关闭界面的设置，绑定界面中的background，实现快速关闭
-        if (uiView.quickClose) {
-            let backGround = uiView.node.getChildByName('background');
-            if (!backGround) {
-                backGround = new cc.Node()
-                backGround.name = 'background';
-                backGround.setContentSize(cc.winSize);
-                uiView.node.addChild(backGround, -1);
+        if (this.UIConf[uiId].quickClose) {
+            let quickClose = uiView.node.getChildByName('quickClose');
+            if (!quickClose) {
+                quickClose = new cc.Node();
+                quickClose.name = 'quickClose';
+                let widget = quickClose.addComponent(cc.Widget);
+                widget.isAlignTop = true;
+                widget.isAlignBottom = true;
+                widget.isAlignLeft = true;
+                widget.isAlignRight = true;
+                widget.alignMode = cc.Widget.AlignMode.ON_WINDOW_RESIZE;
+                uiView.node.addChild(quickClose, -1);
             }
-            backGround.targetOff(cc.Node.EventType.TOUCH_START);
-            backGround.on(cc.Node.EventType.TOUCH_START, (event: cc.Event.EventCustom) => {
+            quickClose.targetOff(cc.Node.EventType.TOUCH_START);
+            quickClose.on(cc.Node.EventType.TOUCH_START, (event: cc.Event.EventCustom) => {
                 event.stopPropagation();
                 this.close(uiView);
-            }, backGround);
+            }, quickClose);
         }
 
+        // 添加全面屏适配插件
+        uiView.addComponent(FullScreenFit);
+
         // 添加到场景中
-        let child = cc.director.getScene().getChildByName('Canvas');
+        let child = cc.director.getScene().getChildByName('Canvas').getChildByName("UI");
         child.addChild(uiView.node);
 
         // 刷新其他UI
@@ -388,7 +389,7 @@ export class UIManager {
             // 显示之前的界面
             if (preUIInfo && preUIInfo.uiView && this.isTopUI(preUIInfo.uiId)) {
                 // 如果之前的界面弹到了最上方（中间有肯能打开了其他界面）
-                preUIInfo.uiView.node.active = true
+                preUIInfo.uiView.node.active = true;
                 // 回调onTop
                 preUIInfo.uiView.onTop(uiId, uiView.onClose());
             } else {
@@ -398,7 +399,7 @@ export class UIManager {
             if (this.uiCloseDelegate) {
                 this.uiCloseDelegate(uiId);
             }
-            if (uiView.cache) {
+            if (this.UIConf[uiId].cache) {
                 this.UICache[uiId] = uiView;
                 uiView.node.removeFromParent(false);
                 cc.log(`uiView removeFromParent ${uiInfo.uiId}`);
@@ -408,7 +409,7 @@ export class UIManager {
                 cc.log(`uiView destroy ${uiInfo.uiId}`);
             }
             this.autoExecNextUI();
-        }
+        };
         // 执行关闭动画
         this.autoExecAnimation(uiView, "uiClose", close);
     }
@@ -452,7 +453,7 @@ export class UIManager {
             let uiInfo = this.UIStack.pop();
             let uiId = uiInfo.uiId;
             let uiView = uiInfo.uiView;
-            uiInfo.isClose = true
+            uiInfo.isClose = true;
 
             // 回收屏蔽层
             if (uiInfo.preventNode) {
@@ -465,8 +466,8 @@ export class UIManager {
             }
 
             if (uiView) {
-                uiView.onClose()
-                if (uiView.cache) {
+                uiView.onClose();
+                if (this.UIConf[uiId].cache) {
                     this.UICache[uiId] = uiView;
                     uiView.node.removeFromParent(false);
                 } else {

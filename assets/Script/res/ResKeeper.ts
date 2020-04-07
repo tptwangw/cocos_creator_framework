@@ -14,7 +14,7 @@ export interface autoResInfo {
     url: string;
     use: string;
     type?: typeof cc.Asset;
-};
+}
 
 @ccclass
 export default class ResKeeper extends cc.Component {
